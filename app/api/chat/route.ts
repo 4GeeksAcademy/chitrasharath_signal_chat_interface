@@ -6,6 +6,10 @@ type GroqUsage = {
   prompt_tokens?: number;
   completion_tokens?: number;
   total_tokens?: number;
+  prompt_time?: number;
+  completion_time?: number;
+  total_time?: number;
+  queue_time?: number;
 };
 
 type GroqMetadata = {
@@ -21,32 +25,46 @@ type GroqResponse = {
   error?: { message?: string };
 };
 
-const getLatestUserContent = (body: unknown): string | null => {
+type GroqMessage = {
+  role: "user" | "assistant";
+  content: string;
+};
+
+const getConversationMessages = (body: unknown): GroqMessage[] | null => {
   if (!body || typeof body !== "object") return null;
 
   const payload = body as { message?: unknown; messages?: unknown };
   if (typeof payload.message === "string" && payload.message.trim()) {
-    return payload.message.trim();
+    return [{ role: "user", content: payload.message.trim() }];
   }
 
   if (!Array.isArray(payload.messages)) return null;
 
-  const latestUserMessage = [...payload.messages]
-    .reverse()
-    .find(
-      (message): message is { role?: unknown; content?: unknown } =>
-        !!message && typeof message === "object" && "role" in message,
-    );
+  const messages = payload.messages
+    .map((message): GroqMessage | null => {
+      if (!message || typeof message !== "object") return null;
 
-  if (!latestUserMessage || latestUserMessage.role !== "user") return null;
-  if (typeof latestUserMessage.content !== "string") return null;
+      const item = message as { role?: unknown; content?: unknown };
+      if ((item.role !== "user" && item.role !== "assistant") || typeof item.content !== "string") {
+        return null;
+      }
 
-  const content = latestUserMessage.content.trim();
-  return content ? content : null;
+      const content = item.content.trim();
+      if (!content) return null;
+
+      return { role: item.role, content };
+    })
+    .filter((message): message is GroqMessage => message !== null);
+
+  if (!messages.length) return null;
+  if (messages[messages.length - 1]?.role !== "user") return null;
+
+  return messages;
 };
 
 export const POST = async (request: Request) => {
   try {
+    const requestStartedAt = Date.now();
     const apiKey = process.env.GROQ_API_KEY;
     if (!apiKey) {
       return NextResponse.json(
@@ -56,10 +74,10 @@ export const POST = async (request: Request) => {
     }
 
     const body = (await request.json()) as unknown;
-    const latestQuestion = getLatestUserContent(body);
-    if (!latestQuestion) {
+    const conversationMessages = getConversationMessages(body);
+    if (!conversationMessages) {
       return NextResponse.json(
-        { error: "Please send one user question at a time." },
+        { error: "Please send a valid conversation ending with a user message." },
         { status: 400 },
       );
     }
@@ -73,7 +91,7 @@ export const POST = async (request: Request) => {
       },
       body: JSON.stringify({
         model: process.env.GROQ_MODEL ?? DEFAULT_MODEL,
-        messages: [{ role: "user", content: latestQuestion }],
+        messages: conversationMessages,
       }),
     });
 
@@ -117,8 +135,11 @@ export const POST = async (request: Request) => {
 
     const usage = data.usage ?? {};
     const metadata = data.metadata ?? {};
-    const completionTimeSeconds = Number(metadata.completion_time ?? 0);
-    const responseTimeMs = Number(metadata.total_time ?? 0) * 1000;
+    const completionTimeSeconds = Number(usage.completion_time ?? metadata.completion_time ?? 0);
+    const providerTotalTimeSeconds = Number(usage.total_time ?? metadata.total_time ?? 0);
+    const measuredRoundTripMs = Date.now() - requestStartedAt;
+    const responseTimeMs =
+      providerTotalTimeSeconds > 0 ? providerTotalTimeSeconds * 1000 : measuredRoundTripMs;
     const completionTokens = Number(usage.completion_tokens ?? 0);
     const tokensPerSecond =
       completionTimeSeconds > 0 ? completionTokens / completionTimeSeconds : 0;

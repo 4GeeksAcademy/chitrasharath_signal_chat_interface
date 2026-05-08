@@ -119,7 +119,7 @@ export const useChatSession = () => {
       const response = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ messages: [userMessage] }),
+        body: JSON.stringify({ messages: nextMessages }),
       });
 
       const data = (await response.json()) as ChatApiResponse & { error?: string };
