@@ -223,3 +223,44 @@ export interface ChatSessionState {
 - If a component exceeds `80` lines, split it into smaller components
 - There is no database
 - Do not use any pre-built UI component library, including shadcn, MUI, or Ant Design
+
+# Implementation Addendum (Current Codebase)
+
+The following notes reflect behavior implemented in the current app and should be treated as additive context to the sections above.
+
+## Conversation Focus and Scroll Behavior
+
+- After a new assistant response is appended, the UI programmatically moves focus to the latest assistant message bubble.
+- The page then performs a smooth scroll to align the top of that latest response just below the sticky top stack (menu + header + KPI area).
+- Initial hydration does not trigger this auto-scroll behavior; it only triggers when assistant response count increases.
+- The latest assistant message is identified in `MessageList` and receives a forwarded ref used by page-level orchestration.
+
+## Composer Dock and Message Area Spacing
+
+- The message area bottom spacing is dynamic rather than fixed.
+- A `ResizeObserver` tracks the rendered height of the sticky composer dock.
+- Message-list bottom padding is computed from composer height plus a small buffer so the last messages are not hidden under the sticky composer.
+
+## Mobile Sidebar Behavior
+
+- On mobile (`< md`), KPI and telemetry panels are available in a right-side drawer opened via a hamburger/menu button.
+- The drawer uses safe-area-aware padding:
+  - top: `calc(env(safe-area-inset-top) + 1rem)`
+  - bottom: `calc(env(safe-area-inset-bottom) + 1rem)`
+- This ensures the drawer header row and `Close` button remain visible and not clipped on devices with notches/browser chrome.
+- The drawer closes when:
+  - the backdrop is clicked,
+  - the `Close` button is clicked,
+  - the user interacts with the composer textarea,
+  - the viewport resizes to desktop width.
+
+## Sticky Layout Details
+
+- The top brand/KPI stack remains sticky and gains elevation shadow once page scroll exceeds a small threshold.
+- Desktop keeps telemetry in a sticky right column offset below the sticky top stack.
+- Mobile keeps telemetry in the drawer, while chat stays primary in the main flow.
+
+## Accessibility and Interaction Notes
+
+- The message list uses `aria-live="polite"` so new messages are announced without aggressively interrupting assistive tech.
+- The latest assistant bubble is temporarily focusable (`tabIndex={-1}`) to support programmatic focus after response arrival.
