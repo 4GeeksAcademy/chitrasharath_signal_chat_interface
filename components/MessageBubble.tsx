@@ -1,16 +1,25 @@
+import type { RefObject } from "react";
 import type { ChatMessage } from "@/types/chat";
 
 interface MessageBubbleProps {
   message: ChatMessage;
+  isLatestAssistantResponse?: boolean;
+  bubbleRef?: RefObject<HTMLElement | null>;
 }
 
-export const MessageBubble = ({ message }: MessageBubbleProps) => {
+export const MessageBubble = ({
+  message,
+  isLatestAssistantResponse = false,
+  bubbleRef,
+}: MessageBubbleProps) => {
   const isUser = message.role === "user";
 
   return (
     <li className={`flex ${isUser ? "justify-end" : "justify-start"}`}>
       <article
-        className={`max-w-[85%] rounded-2xl border px-4 py-3 ${
+        ref={bubbleRef}
+        tabIndex={isLatestAssistantResponse ? -1 : undefined}
+          className={`max-w-[85%] rounded-2xl border px-4 py-3 ${
           isUser
             ? "border-[var(--accent)] bg-[color-mix(in_oklab,var(--accent),white_88%)]"
             : "border-[var(--border)] bg-white"

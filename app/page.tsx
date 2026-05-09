@@ -17,8 +17,13 @@ const Home = () => {
   const [isStickyElevated, setIsStickyElevated] = useState(false);
   const [asideStickyTop, setAsideStickyTop] = useState(0);
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
+  const [composerDockHeight, setComposerDockHeight] = useState(0);
   const stickyStackRef = useRef<HTMLDivElement>(null);
+  const composerDockRef = useRef<HTMLDivElement>(null);
   const chatInputRef = useRef<HTMLTextAreaElement>(null);
+  const latestAssistantResponseRef = useRef<HTMLElement>(null);
+  const previousAssistantCountRef = useRef(0);
+  const hasTrackedInitialAssistantCountRef = useRef(false);
   const { activeModel, inputValue, setInputValue, state, submitMessage, resetSession } =
     useChatSession();
 
@@ -57,6 +62,25 @@ const Home = () => {
   }, []);
 
   useEffect(() => {
+    const updateComposerDockHeight = () => {
+      const nextHeight = composerDockRef.current?.getBoundingClientRect().height ?? 0;
+      setComposerDockHeight(Math.round(nextHeight));
+    };
+
+    updateComposerDockHeight();
+    const observer = new ResizeObserver(updateComposerDockHeight);
+    if (composerDockRef.current) {
+      observer.observe(composerDockRef.current);
+    }
+
+    window.addEventListener("resize", updateComposerDockHeight);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("resize", updateComposerDockHeight);
+    };
+  }, []);
+
+  useEffect(() => {
     const closeMobileDrawerOnDesktop = () => {
       if (window.innerWidth >= 768) {
         setIsMobileSidebarOpen(false);
@@ -74,6 +98,31 @@ const Home = () => {
 
     return () => window.clearTimeout(timer);
   }, []);
+
+  useEffect(() => {
+    const assistantCount = state.messages.filter((message) => message.role === "assistant").length;
+
+    if (!hasTrackedInitialAssistantCountRef.current) {
+      previousAssistantCountRef.current = assistantCount;
+      hasTrackedInitialAssistantCountRef.current = true;
+      return;
+    }
+
+    const hasNewAssistantResponse = assistantCount > previousAssistantCountRef.current;
+    if (hasNewAssistantResponse) {
+      const latestResponseElement = latestAssistantResponseRef.current;
+      if (latestResponseElement) {
+        const stickyHeight = stickyStackRef.current?.getBoundingClientRect().height ?? 0;
+        const targetTop =
+          window.scrollY + latestResponseElement.getBoundingClientRect().top - stickyHeight - 12;
+
+        latestResponseElement.focus({ preventScroll: true });
+        window.scrollTo({ top: Math.max(targetTop, 0), behavior: "smooth" });
+      }
+    }
+
+    previousAssistantCountRef.current = assistantCount;
+  }, [state.messages]);
 
   return (
     <div className="mx-auto flex min-h-screen w-full max-w-6xl flex-col gap-4 px-4 py-5 md:gap-5 md:px-6">
@@ -105,16 +154,27 @@ const Home = () => {
       </div>
       <main className="grid grid-cols-1 gap-4 md:grid-cols-[2fr_1fr] md:gap-5">
         <ChatPanel>
-          <MessageList messages={state.messages} />
-          <StatusBanner isLoading={state.isLoading} errorMessage={state.errorMessage} />
-          <MessageComposer
-            value={inputValue}
-            isLoading={state.isLoading}
-            onChange={setInputValue}
-            onSubmit={submitMessage}
-            textareaRef={chatInputRef}
-            onTextareaInteract={handleTextareaInteract}
-          />
+          <div className="space-y-3" style={{ paddingBottom: `${composerDockHeight + 16}px` }}>
+            <MessageList
+              messages={state.messages}
+              latestAssistantResponseRef={latestAssistantResponseRef}
+            />
+            <StatusBanner isLoading={state.isLoading} errorMessage={state.errorMessage} />
+          </div>
+
+          <div
+            ref={composerDockRef}
+            className="sticky bottom-0 z-20 -mx-4 border-t border-[var(--border)] bg-[color-mix(in_oklab,var(--surface),white_10%)] px-4 pb-[calc(env(safe-area-inset-bottom)+0.75rem)] pt-3 backdrop-blur md:-mx-5 md:px-5"
+          >
+            <MessageComposer
+              value={inputValue}
+              isLoading={state.isLoading}
+              onChange={setInputValue}
+              onSubmit={submitMessage}
+              textareaRef={chatInputRef}
+              onTextareaInteract={handleTextareaInteract}
+            />
+          </div>
         </ChatPanel>
 
         <div
@@ -127,7 +187,7 @@ const Home = () => {
 
         <aside
           id="mobile-sidebar-drawer"
-          className={`fixed inset-y-0 right-0 z-50 w-[min(88vw,22rem)] overflow-y-auto border-l border-[var(--border)] bg-[var(--surface)] p-4 shadow-[0_16px_40px_rgba(20,33,61,0.2)] transition-transform md:hidden ${
+          className={`fixed inset-y-0 right-0 z-50 w-[min(88vw,22rem)] overflow-y-auto border-l border-[var(--border)] bg-[var(--surface)] px-4 pb-[calc(env(safe-area-inset-bottom)+1rem)] pt-[calc(env(safe-area-inset-top)+1rem)] shadow-[0_16px_40px_rgba(20,33,61,0.2)] transition-transform md:hidden ${
             isMobileSidebarOpen ? "translate-x-0" : "translate-x-full"
           }`}
         >

@@ -24,7 +24,7 @@ export const MessageComposer = ({
 
   return (
     <form
-      className="mt-4 flex flex-col gap-3"
+      className="flex flex-col gap-3"
       onSubmit={(event) => {
         event.preventDefault();
         onSubmit();
@@ -34,6 +34,12 @@ export const MessageComposer = ({
         ref={textareaRef}
         value={value}
         onChange={(event) => onChange(event.target.value)}
+        onKeyDown={(event) => {
+          if (event.key === "Enter" && !event.shiftKey) {
+            event.preventDefault();
+            onSubmit();
+          }
+        }}
         onClick={(event) => focusFromGesture(event.currentTarget)}
         onPointerUp={(event) => focusFromGesture(event.currentTarget)}
         onTouchEnd={(event) => focusFromGesture(event.currentTarget)}
